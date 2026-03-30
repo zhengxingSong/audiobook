@@ -6,7 +6,9 @@
       "Bash(ls:*)",
       "Bash(uv run:*)",
       "Bash(uv pip:*)",
-      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short)"
+      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short)",
+      "Bash(.venv/Scripts/python -m pytest tests/unit/engines/test_consistency.py -v --tb=short)",
+      "Bash(.venv/Scripts/python -m pytest tests/unit/engines/test_scene.py -v --tb=short)"
     ]
   }
 }
