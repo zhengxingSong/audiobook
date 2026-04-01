@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 import uuid
+import wave
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
@@ -104,9 +106,20 @@ class BlockProcessResult:
     block_id: str
     success: bool
     fragments: list[Fragment] = field(default_factory=list)
+    synthesis_tasks: list["SynthesisTask"] = field(default_factory=list)
     characters_found: list[str] = field(default_factory=list)
     error_message: str = ""
     processing_time: float = 0.0
+
+
+@dataclass
+class SynthesisTask:
+    """Prepared synthesis work item for a fragment."""
+
+    fragment: Fragment
+    text: str
+    emotion: EmotionProfile
+    block_type: str
 
 
 @dataclass
@@ -132,6 +145,9 @@ class ConversionResult:
     failed_blocks: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     processing_time: float = 0.0
+    fragment_details: list[dict] = field(default_factory=list)
+    character_summary: dict[str, dict] = field(default_factory=dict)
+    emotion_summary: dict[str, int] = field(default_factory=dict)
 
 
 class AudiobookPipeline:
@@ -356,6 +372,7 @@ class AudiobookPipeline:
             )
 
             fragments: list[Fragment] = []
+            synthesis_tasks: list[SynthesisTask] = []
             characters_found: list[str] = []
 
             # Process dialogues
@@ -410,6 +427,14 @@ class AudiobookPipeline:
                             status=FragmentStatus.PENDING,
                         )
                         fragments.append(fragment)
+                        synthesis_tasks.append(
+                            SynthesisTask(
+                                fragment=fragment,
+                                text=dialogue.content,
+                                emotion=emotion,
+                                block_type=block.type.value,
+                            )
+                        )
 
             # Process narration blocks
             if block.type == BlockType.NARRATION and not block.dialogues:
@@ -423,6 +448,10 @@ class AudiobookPipeline:
 
                 if narrator_voice:
                     frag_id = f"frag_{uuid.uuid4().hex[:8]}"
+                    narration_emotion = EmotionProfile(
+                        emotion_type=Emotion.CALM.value,
+                        intensity=EmotionIntensity.LIGHT,
+                    )
                     fragment = Fragment(
                         fragment_id=frag_id,
                         block_id=block.block_id,
@@ -434,11 +463,20 @@ class AudiobookPipeline:
                         status=FragmentStatus.PENDING,
                     )
                     fragments.append(fragment)
+                    synthesis_tasks.append(
+                        SynthesisTask(
+                            fragment=fragment,
+                            text=block.text,
+                            emotion=narration_emotion,
+                            block_type=block.type.value,
+                        )
+                    )
 
             return BlockProcessResult(
                 block_id=block.block_id,
                 success=True,
                 fragments=fragments,
+                synthesis_tasks=synthesis_tasks,
                 characters_found=characters_found,
                 processing_time=time.time() - start_time,
             )
@@ -552,6 +590,94 @@ class AudiobookPipeline:
             fragment_id=fragment.fragment_id,
         )
 
+    def _artifacts_dir_for_output(self, output_file: Path) -> Path:
+        """Resolve the artifacts directory for a given output file."""
+        if output_file.parent.name == "result":
+            base_dir = output_file.parent.parent
+        else:
+            base_dir = output_file.parent
+        artifacts_dir = base_dir / "artifacts" / "fragments"
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        return artifacts_dir
+
+    def _write_fragment_audio(self, audio_bytes: bytes, target: Path) -> None:
+        """Persist a synthesized fragment to disk."""
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(audio_bytes)
+
+    def _merge_wav_files(self, fragment_paths: list[Path], output_file: Path) -> None:
+        """Concatenate fragment WAV files into one audiobook track."""
+        if not fragment_paths:
+            return
+
+        params = None
+        silence = b""
+        merged_frames = bytearray()
+
+        for path in fragment_paths:
+            with wave.open(str(path), "rb") as source:
+                current_params = (
+                    source.getnchannels(),
+                    source.getsampwidth(),
+                    source.getframerate(),
+                    source.getcomptype(),
+                    source.getcompname(),
+                )
+                if params is None:
+                    params = current_params
+                    silence = (
+                        b"\x00"
+                        * int(current_params[2] * 0.08)
+                        * current_params[1]
+                        * current_params[0]
+                    )
+                elif current_params != params:
+                    raise ValueError(
+                        "Cannot merge fragment WAV files with mismatched audio parameters."
+                    )
+                merged_frames.extend(source.readframes(source.getnframes()))
+                merged_frames.extend(silence)
+
+        if params is None:
+            return
+
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(output_file), "wb") as target:
+            target.setnchannels(params[0])
+            target.setsampwidth(params[1])
+            target.setframerate(params[2])
+            target.setcomptype(params[3], params[4])
+            target.writeframes(bytes(merged_frames))
+
+    def _build_semantic_summary(
+        self,
+        fragment_details: list[dict],
+    ) -> tuple[dict[str, dict], dict[str, int]]:
+        """Summarize synthesized fragments by character and emotion."""
+        character_summary: dict[str, dict] = {}
+        emotion_counter: Counter[str] = Counter()
+        voice_tracker: defaultdict[str, set[str]] = defaultdict(set)
+        emotion_tracker: defaultdict[str, Counter[str]] = defaultdict(Counter)
+
+        for item in fragment_details:
+            if item.get("status") != FragmentStatus.COMPLETED.value:
+                continue
+            character = item["character"]
+            emotion = item["emotion"]
+            voice_id = item["voice_id"]
+            emotion_counter[emotion] += 1
+            voice_tracker[character].add(voice_id)
+            emotion_tracker[character][emotion] += 1
+
+        for character, voices in voice_tracker.items():
+            character_summary[character] = {
+                "fragment_count": sum(emotion_tracker[character].values()),
+                "voice_ids": sorted(voices),
+                "emotion_counts": dict(emotion_tracker[character]),
+            }
+
+        return character_summary, dict(emotion_counter)
+
     def convert(
         self,
         novel_path: str,
@@ -594,6 +720,7 @@ class AudiobookPipeline:
 
             # Stage 2: Process blocks
             all_fragments: list[Fragment] = []
+            synthesis_tasks: list[SynthesisTask] = []
             failed_blocks: list[str] = []
             processed_count = 0
 
@@ -610,26 +737,81 @@ class AudiobookPipeline:
                 if result.success:
                     processed_count += 1
                     all_fragments.extend(result.fragments)
+                    synthesis_tasks.extend(result.synthesis_tasks)
                     self._update_progress(increment_blocks=True)
                 else:
                     failed_blocks.append(block.block_id)
                     self._update_progress(increment_failed=True)
 
-            # Stage 3: Synthesis (optional - requires TTS service)
-            self._update_progress(stage="Synthesis ready")
+            # Stage 3: Synthesis and export
+            self._update_progress(stage="Synthesizing fragments")
+            fragment_paths: list[Path] = []
+            fragment_details: list[dict] = []
+            synthesis_errors: list[str] = []
+            artifacts_dir = self._artifacts_dir_for_output(output_file)
 
-            # For MVP, we return success if blocks were processed
-            # Actual synthesis would be done in production deployment
+            for index, task in enumerate(synthesis_tasks, start=1):
+                self._update_progress(
+                    stage=f"Synthesizing fragment {index}/{len(synthesis_tasks)}",
+                    character=task.fragment.character,
+                )
+                synthesis_result = self.synthesize_fragment(task.fragment, task.text, task.emotion)
+
+                detail = {
+                    "fragment_id": task.fragment.fragment_id,
+                    "block_id": task.fragment.block_id,
+                    "character": task.fragment.character,
+                    "voice_id": task.fragment.voice_id,
+                    "emotion": task.emotion.emotion_type,
+                    "text_excerpt": task.text[:80],
+                    "audio_path": None,
+                    "duration": 0.0,
+                    "status": FragmentStatus.FAILED.value,
+                    "block_type": task.block_type,
+                }
+
+                if synthesis_result.success and synthesis_result.audio_fragment is not None:
+                    fragment_path = artifacts_dir / f"{task.fragment.fragment_id}.wav"
+                    self._write_fragment_audio(synthesis_result.audio_fragment.audio_data, fragment_path)
+                    task.fragment.audio_path = str(fragment_path)
+                    task.fragment.duration = synthesis_result.audio_fragment.duration
+                    task.fragment.status = FragmentStatus.COMPLETED
+                    fragment_paths.append(fragment_path)
+                    detail["audio_path"] = str(fragment_path)
+                    detail["duration"] = synthesis_result.audio_fragment.duration
+                    detail["status"] = FragmentStatus.COMPLETED.value
+                else:
+                    task.fragment.status = FragmentStatus.FAILED
+                    error_message = synthesis_result.error_message or "Fragment synthesis failed."
+                    synthesis_errors.append(f"{task.fragment.fragment_id}: {error_message}")
+                    if task.fragment.block_id not in failed_blocks:
+                        failed_blocks.append(task.fragment.block_id)
+                    self._update_progress(increment_failed=True)
+
+                fragment_details.append(detail)
+
+            if fragment_paths:
+                self._update_progress(stage="Exporting audiobook")
+                self._merge_wav_files(fragment_paths, output_file)
+
+            character_summary, emotion_summary = self._build_semantic_summary(fragment_details)
+            success = output_file.exists() and not synthesis_errors and bool(fragment_paths)
+            errors = list(synthesis_errors)
+            if not output_file.exists():
+                errors.append(f"Conversion did not produce an output file: {output_file}")
 
             return ConversionResult(
-                success=True,
-                output_path=output_file,
+                success=success,
+                output_path=output_file if output_file.exists() else None,
                 total_blocks=len(preprocess_result.blocks),
                 processed_blocks=processed_count,
                 total_fragments=len(all_fragments),
                 failed_blocks=failed_blocks,
-                errors=[],
+                errors=errors,
                 processing_time=time.time() - start_time,
+                fragment_details=fragment_details,
+                character_summary=character_summary,
+                emotion_summary=emotion_summary,
             )
 
         except Exception as e:

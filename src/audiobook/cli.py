@@ -113,8 +113,12 @@ def convert(
             output_path=output,
         )
 
+    output_exists = bool(
+        result.output_path and Path(result.output_path).exists()
+    )
+
     # Display results
-    if result.success:
+    if result.success and output_exists:
         console.print(Panel.fit(
             f"[bold green]Conversion complete![/]\n\n"
             f"Output: {result.output_path}\n"
@@ -123,9 +127,14 @@ def convert(
             title="Success",
         ))
     else:
+        errors = list(result.errors)
+        if result.success and not output_exists:
+            missing_output = result.output_path or output
+            errors.append(f"Output file was not created: {missing_output}")
+
         console.print(Panel.fit(
             f"[bold red]Conversion failed![/]\n\n"
-            f"Errors:\n" + "\n".join(f"  - {e}" for e in result.errors),
+            f"Errors:\n" + "\n".join(f"  - {e}" for e in errors),
             title="Error",
         ))
         raise SystemExit(1)

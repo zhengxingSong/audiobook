@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voices | Audiobook Control Room</title>
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <link rel="stylesheet" href="/static/service.css">
+</head>
+<body>
+  <main class="service-shell">
+    <header class="service-header reveal">
+      <div>
+        <p class="eyebrow">Voice Library</p>
+        <h1>Curate the voices that power matching and synthesis.</h1>
+        <p class="hero-text">Upload reference audio, tag the voice, and maintain a clean reusable catalog for future jobs.</p>
+      </div>
+      <nav class="service-nav">
+        <a href="/">Dashboard</a>
+        <a href="/jobs">Jobs</a>
+        <a href="/voices" class="is-active">Voices</a>
+      </nav>
+    </header>
+
+    <section class="service-grid">
+      <article class="service-panel reveal delay-1">
+        <p class="section-kicker">New Voice</p>
+        <h2>Upload reference audio</h2>
+        <form id="voice-form" class="stack-form">
+          <label>
+            <span>Audio file</span>
+            <input type="file" name="audio_file" accept=".wav,.mp3,.ogg" required>
+          </label>
+          <label>
+            <span>Name</span>
+            <input type="text" name="name" required>
+          </label>
+          <label>
+            <span>Gender</span>
+            <select name="gender">
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="neutral" selected>Neutral</option>
+            </select>
+          </label>
+          <label>
+            <span>Age range</span>
+            <input type="text" name="age_range" value="adult">
+          </label>
+          <label>
+            <span>Tags</span>
+            <input type="text" name="tags" placeholder="warm, calm, narrator">
+          </label>
+          <label>
+            <span>Description</span>
+            <textarea name="description" rows="4"></textarea>
+          </label>
+          <button class="button button-primary" type="submit">Add voice</button>
+        </form>
+        <p id="voice-form-status" class="form-status">Ready.</p>
+      </article>
+
+      <article class="service-panel reveal delay-2">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Catalog</p>
+            <h2>Stored voices</h2>
+          </div>
+          <button id="voices-refresh" class="button button-ghost" type="button">Refresh</button>
+        </div>
+        <div id="voices-table" class="service-list"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="/static/voices.js"></script>
+</body>
+</html>

@@ -153,8 +153,9 @@ class TestConvertCommand:
                     ["convert", str(temp_novel_file), "-o", str(output_path)],
                 )
 
-                assert result.exit_code == 0
-                assert "Conversion complete" in result.output
+                assert result.exit_code == 1
+                assert "Conversion failed" in result.output
+                assert "Output file was not created" in result.output
 
     def test_convert_with_tts_endpoint(
         self,
@@ -193,11 +194,50 @@ class TestConvertCommand:
                      "--tts-endpoint", custom_endpoint],
                 )
 
-                assert result.exit_code == 0
+                assert result.exit_code == 1
                 # Verify the endpoint was used
                 mock_pipeline_class.assert_called_once()
                 call_kwargs = mock_pipeline_class.call_args.kwargs
                 assert call_kwargs["tts_endpoint"] == custom_endpoint
+
+    def test_convert_succeeds_when_output_exists(
+        self,
+        cli_runner: CliRunner,
+        temp_home: Path,
+        temp_novel_file: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test convert reports success only when the output file exists."""
+        monkeypatch.setattr(Path, "home", lambda: temp_home)
+
+        output_path = temp_dir / "output.mp3"
+        output_path.write_bytes(b"fake-audio")
+
+        with patch("audiobook.cli.AudiobookPipeline") as mock_pipeline_class:
+            with patch("audiobook.cli.VoiceLibrary") as mock_library_class:
+                mock_library = MagicMock()
+                mock_library.count.return_value = 0
+                mock_library_class.return_value = mock_library
+
+                mock_pipeline = MagicMock()
+                mock_pipeline.convert.return_value = MagicMock(
+                    success=True,
+                    output_path=output_path,
+                    total_blocks=10,
+                    processed_blocks=10,
+                    total_fragments=10,
+                    errors=[],
+                )
+                mock_pipeline_class.return_value = mock_pipeline
+
+                result = cli_runner.invoke(
+                    main,
+                    ["convert", str(temp_novel_file), "-o", str(output_path)],
+                )
+
+                assert result.exit_code == 0
+                assert "Conversion complete" in result.output
 
     def test_convert_fails_on_missing_file(
         self,

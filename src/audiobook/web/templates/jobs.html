@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jobs | Audiobook Control Room</title>
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <link rel="stylesheet" href="/static/service.css">
+</head>
+<body>
+  <main class="service-shell">
+    <header class="service-header reveal">
+      <div>
+        <p class="eyebrow">Job Service</p>
+        <h1>Launch and monitor conversion runs.</h1>
+        <p class="hero-text">Submit a novel file, track runtime state, and open reports or outputs from the same service surface.</p>
+      </div>
+      <nav class="service-nav">
+        <a href="/">Dashboard</a>
+        <a href="/jobs" class="is-active">Jobs</a>
+        <a href="/voices">Voices</a>
+      </nav>
+    </header>
+
+    <section class="service-grid">
+      <article class="service-panel reveal delay-1">
+        <p class="section-kicker">New Job</p>
+        <h2>Submit a conversion</h2>
+        <form id="job-form" class="stack-form">
+          <label>
+            <span>Novel file</span>
+            <input type="file" name="novel_file" accept=".txt,.md,.epub">
+          </label>
+          <label>
+            <span>Or local path</span>
+            <input type="text" name="novel_path" placeholder="F:\path\to\novel.txt">
+          </label>
+          <label>
+            <span>Output name</span>
+            <input type="text" name="output_name" placeholder="chapter-one.wav">
+          </label>
+          <label>
+            <span>TTS endpoint</span>
+            <input type="text" name="tts_endpoint" value="demo://tone">
+          </label>
+          <button class="button button-primary" type="submit">Create job</button>
+        </form>
+        <p id="job-form-status" class="form-status">Ready.</p>
+      </article>
+
+      <article class="service-panel reveal delay-2">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Queue</p>
+            <h2>Recent jobs</h2>
+          </div>
+          <button id="jobs-refresh" class="button button-ghost" type="button">Refresh</button>
+        </div>
+        <div id="jobs-table" class="service-list"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="/static/jobs.js"></script>
+</body>
+</html>

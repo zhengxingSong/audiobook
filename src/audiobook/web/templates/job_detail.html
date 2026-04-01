@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Detail | Audiobook Control Room</title>
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <link rel="stylesheet" href="/static/service.css">
+</head>
+<body>
+  <main class="service-shell">
+    <header class="service-header reveal">
+      <div>
+        <p class="eyebrow">Job Detail</p>
+        <h1 id="detail-page-title">Tracking __JOB_ID__</h1>
+        <p class="hero-text">Inspect runtime status, errors, reports, and output artifacts for a single conversion job.</p>
+      </div>
+      <nav class="service-nav">
+        <a href="/">Dashboard</a>
+        <a href="/jobs" class="is-active">Jobs</a>
+        <a href="/voices">Voices</a>
+      </nav>
+    </header>
+
+    <section class="service-grid detail-grid">
+      <article class="service-panel reveal delay-1">
+        <p class="section-kicker">Status</p>
+        <h2 id="job-status-title">Loading</h2>
+        <div class="detail-metrics">
+          <div><span>Status</span><strong id="job-status">-</strong></div>
+          <div><span>Stage</span><strong id="job-stage">-</strong></div>
+          <div><span>Blocks</span><strong id="job-blocks">-</strong></div>
+          <div><span>Fragments</span><strong id="job-fragments">-</strong></div>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div id="job-progress-fill" class="progress-fill" style="width: 0%"></div>
+        </div>
+        <p id="job-progress-text" class="form-status">Waiting for telemetry.</p>
+      </article>
+
+      <article class="service-panel reveal delay-2">
+        <p class="section-kicker">Artifacts</p>
+        <h2>Outputs and reports</h2>
+        <div class="stack-links">
+          <a id="job-report-link" class="button button-secondary" href="#" target="_blank" rel="noreferrer">Open report JSON</a>
+          <a id="job-errors-link" class="button button-secondary" href="#" target="_blank" rel="noreferrer">Open errors JSON</a>
+          <a id="job-result-link" class="button button-primary" href="#" target="_blank" rel="noreferrer">Download result</a>
+        </div>
+        <pre id="job-errors-preview" class="code-preview">No errors loaded.</pre>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    window.JOB_ID = "__JOB_ID__";
+  </script>
+  <script src="/static/job-detail.js"></script>
+</body>
+</html>

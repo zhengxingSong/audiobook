@@ -343,9 +343,9 @@ class ProgressTracker:
         """Set the current emotion being synthesized."""
         self.update(emotion=emotion)
 
-    def finish(self) -> None:
-        """Mark the conversion as complete."""
-        self.info.current_stage = "完成"
+    def finish(self, stage: str = "完成") -> None:
+        """Mark the conversion as finished with a terminal stage."""
+        self.info.current_stage = stage
         self.info.current_character = ""
         self.info.current_emotion = ""
         self._notify()
@@ -385,7 +385,7 @@ def generate_sse_events(
         yield f"data: {data}\n\n"
 
         # Check if conversion is complete
-        if tracker.info.current_stage == "完成":
+        if tracker.info.current_stage in {"完成", "Completed", "Failed", "Cancelled"}:
             break
 
         # Wait for next update
@@ -411,7 +411,7 @@ async def generate_sse_events_async(
         data = tracker.to_json()
         yield f"data: {data}\n\n"
 
-        if tracker.info.current_stage == "完成":
+        if tracker.info.current_stage in {"完成", "Completed", "Failed", "Cancelled"}:
             break
 
         await asyncio.sleep(interval)

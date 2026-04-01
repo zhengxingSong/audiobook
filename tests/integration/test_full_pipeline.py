@@ -125,7 +125,7 @@ def pipeline(voice_library: VoiceLibrary) -> AudiobookPipeline:
     """Create a pipeline with the voice library."""
     return AudiobookPipeline(
         voice_library=voice_library,
-        tts_endpoint="http://localhost:9880",
+        tts_endpoint="demo://tone",
     )
 
 
@@ -169,7 +169,7 @@ class TestAudiobookPipelineInit:
 
     def test_init_with_voice_library(self, voice_library: VoiceLibrary) -> None:
         """Test pipeline initialization with voice library."""
-        pipeline = AudiobookPipeline(voice_library=voice_library)
+        pipeline = AudiobookPipeline(voice_library=voice_library, tts_endpoint="demo://tone")
         assert pipeline.voice_library == voice_library
         assert pipeline.parser is not None
         assert pipeline.character_engine is not None
@@ -186,7 +186,7 @@ class TestAudiobookPipelineInit:
 
     def test_init_state_tracking(self, voice_library: VoiceLibrary) -> None:
         """Test initial state tracking is empty."""
-        pipeline = AudiobookPipeline(voice_library=voice_library)
+        pipeline = AudiobookPipeline(voice_library=voice_library, tts_endpoint="demo://tone")
         assert pipeline.character_states == {}
         assert pipeline.confirmed_voices == {}
         assert pipeline._characters == {}
@@ -550,21 +550,25 @@ class TestClassifyCharacters:
 class TestConvert:
     """Tests for full conversion workflow."""
 
-    def test_convert_success(
+    def test_convert_generates_output_and_semantic_summary(
         self,
         pipeline: AudiobookPipeline,
         sample_novel: Path,
         temp_dir: Path,
     ) -> None:
-        """Test successful conversion."""
+        """Test conversion generates output plus semantic summaries."""
         output_path = str(temp_dir / "output.wav")
 
         result = pipeline.convert(str(sample_novel), output_path)
 
         assert isinstance(result, ConversionResult)
         assert result.success
+        assert Path(output_path).exists()
         assert result.total_blocks > 0
         assert result.processed_blocks > 0
+        assert result.fragment_details
+        assert result.character_summary
+        assert result.emotion_summary
         assert result.processing_time >= 0
 
     def test_convert_nonexistent_input(
@@ -593,6 +597,7 @@ class TestConvert:
         result = pipeline.convert(str(sample_novel), output_path)
 
         assert result.success
+        assert Path(output_path).exists()
         assert Path(output_path).parent.exists()
 
     def test_convert_processes_all_blocks(
@@ -693,7 +698,7 @@ class TestEndToEnd:
         temp_dir: Path,
     ) -> None:
         """Test complete pipeline workflow."""
-        pipeline = AudiobookPipeline(voice_library=voice_library)
+        pipeline = AudiobookPipeline(voice_library=voice_library, tts_endpoint="demo://tone")
 
         # Track progress
         progress_history: list[dict] = []
@@ -708,6 +713,8 @@ class TestEndToEnd:
 
         # Verify result
         assert result.success
+        assert Path(output_path).exists()
+        assert "narrator" in result.character_summary
 
         # Verify progress tracking
         assert len(progress_history) > 0
@@ -731,9 +738,10 @@ class TestEndToEnd:
 
         result = pipeline.convert(str(empty_novel), output_path)
 
-        # Should succeed but with no blocks
-        assert result.success
+        # Empty novels remain an honest failure because there is no audio to synthesize.
+        assert not result.success
         assert result.total_blocks == 0
+        assert any("did not produce an output file" in error for error in result.errors)
 
     def test_pipeline_handles_complex_novel(
         self,
@@ -766,12 +774,14 @@ class TestEndToEnd:
         complex_novel = temp_dir / "complex.txt"
         complex_novel.write_text(complex_content, encoding="utf-8")
 
-        pipeline = AudiobookPipeline(voice_library=voice_library)
+        pipeline = AudiobookPipeline(voice_library=voice_library, tts_endpoint="demo://tone")
         output_path = str(temp_dir / "output.wav")
 
         result = pipeline.convert(str(complex_novel), output_path)
 
         assert result.success
+        assert Path(output_path).exists()
+        assert result.character_summary
         # Check that characters were identified
         # 张伟, 王芳
         char1 = "\u5f20\u4f22"

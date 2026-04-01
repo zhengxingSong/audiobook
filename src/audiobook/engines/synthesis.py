@@ -1,6 +1,11 @@
 """Voice synthesis engine - GPT-SoVITS integration."""
 
+import hashlib
+import io
+import math
+import struct
 import time
+import wave
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -137,6 +142,10 @@ class VoiceSynthesisEngine:
         self.timeout = timeout
         self.max_retries = max_retries
 
+    def _is_demo_endpoint(self) -> bool:
+        """Return whether the engine should synthesize local demo audio."""
+        return self.endpoint.startswith("demo://")
+
     def generate_prompt(self, voice: Voice, emotion: EmotionProfile, text: str) -> str:
         """Generate synthesis prompt from voice and emotion parameters.
 
@@ -270,6 +279,13 @@ class VoiceSynthesisEngine:
         if fragment_id is None:
             fragment_id = f"frag_{int(time.time() * 1000)}"
 
+        if self._is_demo_endpoint():
+            return self._synthesize_demo_fragment(
+                voice_id=voice_id,
+                text=text,
+                fragment_id=fragment_id,
+            )
+
         last_error: Optional[Exception] = None
 
         for attempt in range(self.max_retries):
@@ -388,14 +404,25 @@ class VoiceSynthesisEngine:
         start_time = time.time()
 
         try:
+            if self._is_demo_endpoint():
+                fragment = self._synthesize_demo_fragment(
+                    voice_id=voice.voice_id,
+                    text=text,
+                    fragment_id=fragment_id or f"frag_{int(time.time() * 1000)}",
+                    emotion=emotion,
+                    voice=voice,
+                )
+            else:
+                params = self.build_synthesis_params(voice, emotion, text)
+                fragment = self.synthesize(
+                    prompt=params["prompt_text"],
+                    text=text,
+                    voice_id=voice.voice_id,
+                    reference_audio=params.get("ref_audio_path", voice.audio_path),
+                    fragment_id=fragment_id,
+                )
+
             params = self.build_synthesis_params(voice, emotion, text)
-            fragment = self.synthesize(
-                prompt=params["prompt_text"],
-                text=text,
-                voice_id=voice.voice_id,
-                reference_audio=params.get("ref_audio_path", voice.audio_path),
-                fragment_id=fragment_id,
-            )
 
             # Validate the result
             expected_duration = self._estimate_duration(text)
@@ -420,6 +447,118 @@ class VoiceSynthesisEngine:
                 error_message=str(e),
                 processing_time=time.time() - start_time,
             )
+
+    def _synthesize_demo_fragment(
+        self,
+        voice_id: str,
+        text: str,
+        fragment_id: str,
+        emotion: Optional[EmotionProfile] = None,
+        voice: Optional[Voice] = None,
+    ) -> AudioFragment:
+        """Generate deterministic local WAV audio for demo and test flows."""
+        sample_rate = 44100
+        expected_duration = self._estimate_duration(text)
+        speed_factor = self._demo_speed_factor(emotion.emotion_type if emotion else "neutral")
+        duration = max(0.35, expected_duration * speed_factor)
+        base_frequency = self._demo_base_frequency(voice_id, voice)
+        emotion_frequency = self._demo_emotion_frequency_delta(
+            emotion.emotion_type if emotion else "neutral"
+        )
+        amplitude = self._demo_amplitude(emotion.intensity if emotion else EmotionIntensity.LIGHT)
+        vibrato = self._demo_vibrato_depth(emotion.emotion_type if emotion else "neutral")
+
+        total_samples = max(int(sample_rate * duration), 1)
+        frames = bytearray()
+        for index in range(total_samples):
+            position = index / sample_rate
+            envelope = min(1.0, position * 6.0, (duration - position) * 6.0)
+            current_frequency = base_frequency + emotion_frequency
+            if vibrato:
+                current_frequency += math.sin(position * 8.0) * vibrato
+            sample = (
+                math.sin(2.0 * math.pi * current_frequency * position)
+                + 0.35 * math.sin(2.0 * math.pi * current_frequency * 2.0 * position)
+            ) * 0.5
+            value = int(max(-1.0, min(1.0, sample * amplitude * envelope)) * 32767)
+            frames.extend(struct.pack("<h", value))
+
+        wav_bytes = self._write_wav_bytes(bytes(frames), sample_rate)
+        return AudioFragment(
+            fragment_id=fragment_id,
+            audio_data=wav_bytes,
+            duration=duration,
+            sample_rate=sample_rate,
+            format="wav",
+            pitch=base_frequency + emotion_frequency,
+            volume=amplitude,
+            character_id=voice_id,
+        )
+
+    def _write_wav_bytes(self, frames: bytes, sample_rate: int) -> bytes:
+        """Wrap PCM frames in a mono WAV container."""
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(frames)
+        return buffer.getvalue()
+
+    def _demo_base_frequency(self, voice_id: str, voice: Optional[Voice]) -> float:
+        """Choose a stable base pitch per voice."""
+        digest = hashlib.sha256(voice_id.encode("utf-8")).digest()
+        seed = int.from_bytes(digest[:2], byteorder="little")
+        base = 180 + (seed % 120)
+        if voice and "narrator" in {tag.lower() for tag in voice.tags}:
+            base = 170
+        return float(base)
+
+    def _demo_speed_factor(self, emotion_type: str) -> float:
+        """Approximate emotion pacing while staying within validation tolerance."""
+        mapping = {
+            "angry": 0.9,
+            "happy": 0.95,
+            "surprised": 0.88,
+            "fearful": 1.08,
+            "sad": 1.18,
+            "calm": 1.02,
+            "nervous": 0.92,
+            "neutral": 1.0,
+        }
+        return mapping.get(emotion_type.lower(), 1.0)
+
+    def _demo_emotion_frequency_delta(self, emotion_type: str) -> float:
+        """Shift pitch to make emotion changes audible."""
+        mapping = {
+            "angry": 52.0,
+            "happy": 36.0,
+            "surprised": 68.0,
+            "fearful": 24.0,
+            "sad": -42.0,
+            "calm": -8.0,
+            "nervous": 18.0,
+            "neutral": 0.0,
+        }
+        return mapping.get(emotion_type.lower(), 0.0)
+
+    def _demo_amplitude(self, intensity: EmotionIntensity) -> float:
+        """Scale amplitude by emotion intensity."""
+        mapping = {
+            EmotionIntensity.LIGHT: 0.35,
+            EmotionIntensity.MODERATE: 0.46,
+            EmotionIntensity.STRONG: 0.58,
+        }
+        return mapping.get(intensity, 0.42)
+
+    def _demo_vibrato_depth(self, emotion_type: str) -> float:
+        """Add slight instability for fearful or nervous speech."""
+        mapping = {
+            "fearful": 11.0,
+            "nervous": 8.0,
+            "surprised": 6.0,
+        }
+        return mapping.get(emotion_type.lower(), 0.0)
 
     def validate_audio(
         self, fragment: AudioFragment, expected_duration: float
@@ -543,6 +682,8 @@ class VoiceSynthesisEngine:
         Returns:
             True if service is available, False otherwise.
         """
+        if self._is_demo_endpoint():
+            return True
         try:
             response = requests.get(
                 f"{self.endpoint}/health",

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audiobook Control Room</title>
+  <meta name="description" content="Operational dashboard for audiobook conversion jobs.">
+  <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+  <div class="page-glow page-glow-left"></div>
+  <div class="page-glow page-glow-right"></div>
+
+  <main class="dashboard-shell">
+    <section class="hero-panel reveal">
+      <div class="hero-copy">
+        <p class="eyebrow">Audiobook Control Room</p>
+        <h1>Monitor every chapter, fragment, and handoff from one calm surface.</h1>
+        <p class="hero-text">
+          This dashboard turns the converter into an operating console: service health,
+          live job telemetry, pipeline stages, and API entrypoints stay visible in one place.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="/jobs">Open jobs workspace</a>
+          <a class="button button-secondary" href="/voices">Manage voices</a>
+          <a class="button button-primary" href="/api/jobs">Open jobs API</a>
+          <a class="button button-secondary" href="/health">Check health</a>
+        </div>
+      </div>
+
+      <div class="hero-aside reveal delay-1">
+        <div class="version-chip">Version __APP_VERSION__</div>
+        <div class="signal-card">
+          <span class="signal-label">Runtime Signal</span>
+          <strong id="health-status">Connecting</strong>
+          <span id="health-meta">Waiting for service telemetry</span>
+        </div>
+        <div class="signal-card">
+          <span class="signal-label">Live Jobs</span>
+          <strong id="job-count">0</strong>
+          <span id="job-summary">No registered jobs yet</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats-grid reveal delay-2">
+      <article class="stat-card">
+        <span class="stat-label">Active Jobs</span>
+        <strong class="stat-value" id="metric-active">0</strong>
+        <p class="stat-note">Current conversion flows tracked by the service</p>
+      </article>
+      <article class="stat-card accent-amber">
+        <span class="stat-label">Fragments In Flight</span>
+        <strong class="stat-value" id="metric-fragments">0</strong>
+        <p class="stat-note">Processed fragments across all visible jobs</p>
+      </article>
+      <article class="stat-card accent-cyan">
+        <span class="stat-label">Failure Pressure</span>
+        <strong class="stat-value" id="metric-failed">0</strong>
+        <p class="stat-note">Failed fragments that need investigation</p>
+      </article>
+      <article class="stat-card accent-slate">
+        <span class="stat-label">Pipeline Coverage</span>
+        <strong class="stat-value" id="metric-stages">4</strong>
+        <p class="stat-note">Parsing, matching, synthesis, and monitoring surfaces</p>
+      </article>
+    </section>
+
+    <section class="content-grid">
+      <article class="jobs-panel reveal delay-3">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Job Board</p>
+            <h2>Live conversion traffic</h2>
+          </div>
+          <button class="button button-ghost" id="refresh-button" type="button">Refresh</button>
+        </div>
+
+        <div id="jobs-container" class="jobs-list">
+          <article class="empty-state">
+            <span class="empty-badge">Standby</span>
+            <h3>No active jobs registered</h3>
+            <p>
+              The page is live and connected. Once a conversion tracker is registered,
+              job cards will appear here with completion, stage, and failure telemetry.
+            </p>
+          </article>
+        </div>
+      </article>
+
+      <aside class="side-rail reveal delay-4">
+        <article class="detail-panel">
+          <p class="section-kicker">Inspector</p>
+          <h2 id="detail-title">Awaiting job selection</h2>
+          <p id="detail-text">
+            Select a live job card to inspect its stage, chapter progress, and failure counts.
+          </p>
+          <dl class="detail-list">
+            <div>
+              <dt>Stage</dt>
+              <dd id="detail-stage">Idle</dd>
+            </div>
+            <div>
+              <dt>Progress</dt>
+              <dd id="detail-progress">0%</dd>
+            </div>
+            <div>
+              <dt>Failures</dt>
+              <dd id="detail-failed">0</dd>
+            </div>
+            <div>
+              <dt>Job ID</dt>
+              <dd id="detail-id">No selection</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article class="api-panel">
+          <p class="section-kicker">Surface Map</p>
+          <h2>API channels</h2>
+          <ul class="api-list">
+            <li><span>Dashboard</span><code>/</code></li>
+            <li><span>Health</span><code>/health</code></li>
+            <li><span>Jobs</span><code>/api/jobs</code></li>
+            <li><span>Job Detail</span><code>/api/jobs/{job_id}</code></li>
+            <li><span>SSE Stream</span><code>/api/jobs/{job_id}/stream</code></li>
+          </ul>
+        </article>
+
+        <article class="timeline-panel">
+          <p class="section-kicker">Pipeline Path</p>
+          <ol class="timeline-list">
+            <li><span>01</span><div><strong>Parse novel</strong><p>Split source text into blocks and chapters.</p></div></li>
+            <li><span>02</span><div><strong>Recognize cast</strong><p>Identify characters and resolve voice matches.</p></div></li>
+            <li><span>03</span><div><strong>Synthesize fragments</strong><p>Generate speech units and track failures honestly.</p></div></li>
+            <li><span>04</span><div><strong>Observe delivery</strong><p>Surface runtime state to web and operators.</p></div></li>
+          </ol>
+        </article>
+      </aside>
+    </section>
+  </main>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>
